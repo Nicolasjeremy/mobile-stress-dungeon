@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { Slot, useRouter } from "expo-router";
 import SplashScreen from "./splashScreen"; // Your old splash screen
 import HomeScreen from ".";
+import { BossHealthProvider } from "./BossHealthContext";
 
 export default function Layout() {
   const [isLoading, setIsLoading] = useState(true);
@@ -25,5 +26,10 @@ export default function Layout() {
   }
 
   // Once loading finishes, render the matched route (index, introduction, etc.)
-  return <Slot />;
+  return (
+    <BossHealthProvider>
+      <Slot />
+    </BossHealthProvider>
+  );
 }
+

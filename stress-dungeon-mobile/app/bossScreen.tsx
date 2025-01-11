@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -72,13 +73,7 @@ export default function BossScreen() {
 
   // Handler when a role is pressed
   const handleSelectRole = (role: any) => {
-    // If using Expo Router:
-    // router.push(role.route);
-
-    // If using React Navigation:
-    // navigation.navigate(role.route);
-
-    // Or do any logic you want here, e.g., set a role state, etc.
+    router.push(role.route);
     console.log("Selected role:", role.name);
   };
 
