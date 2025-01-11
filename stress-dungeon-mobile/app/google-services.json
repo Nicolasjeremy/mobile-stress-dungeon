@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "669470169524",
+    "project_id": "mobile-stress-dungeon",
+    "storage_bucket": "mobile-stress-dungeon.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:669470169524:android:639d5b5c48ca2002f27ae1",
+        "android_client_info": {
+          "package_name": "mobile.stressdungeon"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "669470169524-hk9mutidioh7fjafeic40rm2obfgu08l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCBvDljDDWhlfj9K7DV2R-VkvGCOlCnuYI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "669470169524-hk9mutidioh7fjafeic40rm2obfgu08l.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
