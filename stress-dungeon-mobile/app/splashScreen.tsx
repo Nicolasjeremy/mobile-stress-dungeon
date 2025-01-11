@@ -1,17 +1,17 @@
 import React from "react";
 import { View, StyleSheet } from "react-native";
-import { Image } from "expo-image"; // Use expo-image for better GIF support
+import { Image } from "expo-image"; // For better GIF support
 
-const SplashScreen = () => {
+export default function SplashScreen() {
   return (
     <View style={styles.container}>
       <Image
-        source={require("../../assets/images/splashRunningBG.gif")} // Replace with your GIF path
+        source={require("../assets/images/splashRunningBG.gif")}
         style={styles.gif}
       />
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -25,5 +25,3 @@ const styles = StyleSheet.create({
     height: 500,
   },
 });
-
-export default SplashScreen;
