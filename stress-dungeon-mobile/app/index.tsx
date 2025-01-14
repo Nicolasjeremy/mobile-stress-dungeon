@@ -9,13 +9,16 @@ import {
   Alert,
   TextInput,
 } from "react-native";
+
+// Firebase Auth & Firestore
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
 } from "firebase/auth";
-import { auth } from "../firebaseconfig";
+import { doc, setDoc } from "firebase/firestore"; // <-- import Firestore methods
+import { auth, db } from "../firebaseconfig"; // <-- your firebase config
 import CloudAnimation from "./cloudAnimation";
-import { useRouter } from "expo-router"; // <-- NEW
+import { useRouter } from "expo-router";
 
 export default function HomeScreen() {
   const [email, setEmail] = useState("");
@@ -34,6 +37,13 @@ export default function HomeScreen() {
         password
       );
       const user = userCredential.user;
+
+      // Optionally, if you want to ensure they have a Firestore doc:
+      // await setDoc(doc(db, "boss", user.uid), {
+      //   UserID: user.uid,
+      //   BossHealth: 100,
+      // }, { merge: true });
+
       setIsAnimating(true); // Start cloud animation
     } catch (error: any) {
       Alert.alert("Login Failed", error.message);
@@ -49,6 +59,13 @@ export default function HomeScreen() {
         password
       );
       const user = userCredential.user;
+
+      // After successful sign-up, create a boss doc for this user
+      await setDoc(doc(db, "boss", user.uid), {
+        UserID: user.uid,
+        BossHealth: 100, // default health, adjust as desired
+      });
+
       setIsAnimating(true); // Start cloud animation
     } catch (error: any) {
       Alert.alert("Sign Up Failed", error.message);

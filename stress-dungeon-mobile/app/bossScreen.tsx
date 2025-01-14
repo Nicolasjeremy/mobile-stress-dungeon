@@ -10,13 +10,13 @@ import {
   Dimensions,
   ScrollView,
   Image,
+  DimensionValue,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 
-// If you use Expo Router, import useRouter:
-// import { useRouter } from "expo-router";
-
-// If you use React Navigation, import useNavigation or any other hook:
-// import { useNavigation } from "@react-navigation/native";
+// Firestore + Auth
+import { auth, db } from "../firebaseconfig";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
 const { height } = Dimensions.get("window");
 
@@ -26,8 +26,8 @@ const ROLES = [
     name: "Knight",
     description:
       "Knight adalah seorang ahli pedang terampil dengan serangan jarak dekat.",
-    image: require("../assets/images/knight.png"), // or any local image
-    route: "/knight", // or "KnightScreen", depending on your navigation
+    image: require("../assets/images/knight.png"),
+    route: "/knight",
   },
   {
     name: "Guardian",
@@ -48,27 +48,63 @@ const ROLES = [
     description:
       "Archer adalah pemanah ahli dengan serangan jarak jauh yang presisi.",
     image: require("../assets/images/mage.png"),
-    route: "/archer",
+    route: "/sorcerer",
   },
 ];
 
 export default function BossScreen() {
-  // If you’re using Expo Router, do:
-  // const router = useRouter();
-
-  // If you’re using React Navigation, do:
-  // const navigation = useNavigation();
+  // Boss health from Firestore
+  const [bossHealth, setBossHealth] = useState(100);
 
   // Animated value for bottom sheet position.
   const translateY = new Animated.Value(height);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      // re-run the animation whenever BossScreen becomes focused
+      translateY.setValue(height);
+      Animated.timing(translateY, {
+        toValue: height / 2,
+        duration: 800,
+        useNativeDriver: false,
+      }).start();
+    }, [])
+  );
+
+  // Listen to boss health from Firestore
   useEffect(() => {
-    // Animate the role selector panel from the bottom to half the screen
-    Animated.timing(translateY, {
-      toValue: height / 2,
-      duration: 800,
-      useNativeDriver: false,
-    }).start();
+    const user = auth.currentUser;
+    if (!user) {
+      // If not signed in, skip or handle differently
+      return;
+    }
+
+    // Reference to this user’s boss doc
+    const bossDocRef = doc(db, "boss", user.uid);
+
+    // Real-time listener
+    const unsubscribe = onSnapshot(bossDocRef, async (docSnap) => {
+      if (docSnap.exists()) {
+        // The document exists
+        const data = docSnap.data();
+        if (data.BossHealth !== undefined) {
+          setBossHealth(data.BossHealth);
+        }
+      } else {
+        // No doc found => create one
+        try {
+          await setDoc(bossDocRef, {
+            BossHealth: 100,
+          });
+          console.log("Created new boss document for user:", user.uid);
+          setBossHealth(100);
+        } catch (error) {
+          console.error("Error creating boss doc:", error);
+        }
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // Handler when a role is pressed
@@ -76,6 +112,10 @@ export default function BossScreen() {
     router.push(role.route);
     console.log("Selected role:", role.name);
   };
+
+  // Compute fill percentage for the health bar
+  const clampedHealth = Math.max(0, bossHealth);
+  const healthBarWidth = `${(clampedHealth / 100) * 100}%` as DimensionValue;
 
   return (
     <View style={styles.container}>
@@ -90,8 +130,9 @@ export default function BossScreen() {
           <Text style={styles.bossName}>ODDOGARON, THE TOXIC WYVERN</Text>
           {/* Health bar container */}
           <View style={styles.healthBarContainer}>
-            <View style={styles.healthBarFill} />
-            <Text style={styles.healthText}>100 / 100</Text>
+            {/* Dynamic fill width */}
+            <View style={[styles.healthBarFill, { width: healthBarWidth }]} />
+            <Text style={styles.healthText}>{bossHealth} / 100</Text>
           </View>
         </View>
       </ImageBackground>
@@ -158,13 +199,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: "hidden",
     alignItems: "center",
+    position: "relative",
   },
   healthBarFill: {
     position: "absolute",
     left: 0,
     top: 0,
     bottom: 0,
-    width: "100%",
     backgroundColor: "red",
   },
   healthText: {

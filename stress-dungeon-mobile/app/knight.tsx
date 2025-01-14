@@ -1,4 +1,3 @@
-// app/knightScreen.tsx
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -9,18 +8,22 @@ import {
   ImageBackground,
   Alert,
   Dimensions,
+  ScrollView,
+  DimensionValue,
 } from "react-native";
 import { useRouter } from "expo-router";
 import Svg, { Path, Line } from "react-native-svg";
-import { useBossHealth } from "./BossHealthContext";
 
-/** Helper to generate a random distance within [min, max]. */
+// Firebase
+import { auth, db } from "../firebaseconfig";
+import { doc, onSnapshot, updateDoc, increment } from "firebase/firestore";
+
+// Helper: generate random target within [min, max]
 function generateRandomTarget(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// We'll draw the trajectory in a 2D plane. We'll assume top-left is (0,0).
-// We'll collect (x, y) points, then scale them to fit an area in the UI.
+// Calculate projectile points
 function calculateTrajectoryPoints(
   velocity: number,
   angleDeg: number,
@@ -28,17 +31,14 @@ function calculateTrajectoryPoints(
 ) {
   const points: Array<{ x: number; y: number }> = [];
   const angleRad = (angleDeg * Math.PI) / 180;
-
-  // total flight time
   const totalTime = (2 * velocity * Math.sin(angleRad)) / gravity;
-  // We'll sample the path at N steps
   const steps = 50;
+
   for (let i = 0; i <= steps; i++) {
     const t = (totalTime / steps) * i;
     const x = velocity * Math.cos(angleRad) * t;
     const y = velocity * Math.sin(angleRad) * t - 0.5 * gravity * t * t;
     if (y >= 0) {
-      // Only push points while projectile is above ground
       points.push({ x, y });
     }
   }
@@ -48,29 +48,54 @@ function calculateTrajectoryPoints(
 export default function KnightScreen() {
   const router = useRouter();
 
-  // 1) Read & update global boss health from context
-  const { bossHealth, setBossHealth } = useBossHealth();
+  // Boss health from Firestore
+  const [bossHealth, setBossHealth] = useState(100);
 
-  // Projectile inputs
+  // Inputs
   const [velocity, setVelocity] = useState("20");
   const [angle, setAngle] = useState("45");
   const [gravity, setGravity] = useState("9.8");
 
-  // Random target distance
+  // Random target
   const [targetDistance, setTargetDistance] = useState(0);
 
-  // For trajectory visualization
+  // Trajectory
   const [trajectoryPoints, setTrajectoryPoints] = useState<
     Array<{ x: number; y: number }>
   >([]);
 
+  // 1) Listen for changes to BossHealth from Firestore
   useEffect(() => {
-    // On mount, generate a random target
+    const user = auth.currentUser;
+    if (!user) {
+      // not signed in? optionally navigate to login, or just skip
+      return;
+    }
+
+    // Reference to this user’s boss doc
+    const bossDocRef = doc(db, "boss", user.uid);
+
+    // Subscribe to real-time changes
+    const unsubscribe = onSnapshot(bossDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.BossHealth !== undefined) {
+          setBossHealth(data.BossHealth);
+        }
+      } else {
+        console.log("No boss doc found for this user.");
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Generate random target at mount
+  useEffect(() => {
     setTargetDistance(generateRandomTarget(20, 100));
   }, []);
 
-  /** Called when user hits "Simulate" */
-  const handleSimulate = () => {
+  const handleSimulate = async () => {
     const velNum = parseFloat(velocity);
     const angleNum = parseFloat(angle);
     const gravityNum = parseFloat(gravity);
@@ -83,30 +108,40 @@ export default function KnightScreen() {
       return;
     }
 
-    // Calculate the projectile path for visualization
+    // Calculate trajectory
     const points = calculateTrajectoryPoints(velNum, angleNum, gravityNum);
     setTrajectoryPoints(points);
 
-    // Basic projectile formula to get total distance
+    // Max distance of projectile
     const angleRad = (angleNum * Math.PI) / 180;
     const totalTime = (2 * velNum * Math.sin(angleRad)) / gravityNum;
     const maxDistance = velNum * Math.cos(angleRad) * totalTime;
 
-    // Check if user hits within ±5m of target
+    // Check if user hits target
     const difference = Math.abs(maxDistance - targetDistance);
     if (difference <= 5) {
-      // Decrease boss health by 25
-      const newHealth = bossHealth - 25;
-      setBossHealth(newHealth < 0 ? 0 : newHealth);
+      // 2) Decrement boss health in Firestore
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const bossDocRef = doc(db, "boss", user.uid);
 
-      if (newHealth <= 0) {
+          // Subtract 25
+          await updateDoc(bossDocRef, {
+            BossHealth: increment(-25),
+          });
+        }
+      } catch (error) {
+        console.log("Error decrementing boss health:", error);
+      }
+
+      // We *also* see local state changes because of the Firestore onSnapshot
+      if (bossHealth - 25 <= 0) {
         Alert.alert("Boss Defeated!", "You have vanquished the boss!");
-        // Optionally navigate:
-        // router.push("/victory");
       } else {
         Alert.alert(
           "Hit!",
-          `Great shot! Boss health is now ${newHealth <= 0 ? 0 : newHealth}.`
+          `Great shot! Boss health is now ${bossHealth - 25}.`
         );
       }
     } else {
@@ -117,18 +152,14 @@ export default function KnightScreen() {
     }
   };
 
-  /** Back to boss screen (or whichever route you want) */
   const handleBack = () => {
-    router.push("/bossScreen");
+    router.back();
   };
 
-  // We’ll render the trajectory in a simple <Svg> sized to the container
-  // We'll scale x-distances to the width, y-distances to some fraction of the height
+  // For SVG chart
   const { width } = Dimensions.get("window");
-  const height = 200; // some fixed height for the "chart" area
+  const chartHeight = 220;
 
-  // Find the max X distance in the trajectory. We'll scale X to fit the width
-  // Same for Y, but we invert so that "up" is smaller y in SVG
   let maxX = 1;
   let maxY = 1;
   trajectoryPoints.forEach((p) => {
@@ -136,14 +167,13 @@ export default function KnightScreen() {
     if (p.y > maxY) maxY = p.y;
   });
 
-  // Build an SVG path string
-  // We'll start from bottom-left corner (0, height) and draw upwards
+  // Build the path
   let pathData = "";
   trajectoryPoints.forEach((p, i) => {
-    // scale to fit
-    const scaledX = (p.x / maxX) * (width * 0.9); // 0.9 so we have some margin
-    const scaledY = height - (p.y / maxY) * (height * 0.9);
-
+    const padding = 20;
+    const scaledX = padding + (p.x / maxX) * (width - 2 * padding);
+    const scaledY =
+      chartHeight - padding - (p.y / maxY) * (chartHeight - 2 * padding);
     if (i === 0) {
       pathData = `M ${scaledX},${scaledY}`;
     } else {
@@ -151,118 +181,185 @@ export default function KnightScreen() {
     }
   });
 
+  // For the health bar, compute width as a percentage
+  const healthPercentage = Math.max(0, bossHealth); // clamp at 0
+  const healthBarWidth = `${(healthPercentage / 100) * 100}%` as DimensionValue; // e.g. "75%"
+
   return (
     <ImageBackground
-      source={require("../assets/images/boss.png")} // same boss background
+      source={require("../assets/images/boss.png")}
       style={styles.background}
       resizeMode="cover"
     >
-      <View style={styles.overlay}>
-        {/* Header: boss name + health */}
-        <View style={styles.header}>
+      {/* Scrollable content */}
+      <ScrollView style={styles.overlay} contentContainerStyle={styles.content}>
+        {/* Header */}
+        <View style={styles.headerContainer}>
           <Text style={styles.title}>KNIGHT TRAINING</Text>
-          <Text style={styles.bossHealth}>Boss Health: {bossHealth}/100</Text>
+
+          {/* Health bar that matches Firestore value */}
+          <View style={styles.healthBarContainer}>
+            <View style={[styles.healthBarFill, { width: healthBarWidth }]} />
+            <Text style={styles.healthText}>{bossHealth} / 100</Text>
+          </View>
         </View>
 
-        {/* Projectile controls */}
-        <View style={styles.controls}>
-          <Text style={styles.label}>Velocity (m/s):</Text>
-          <TextInput
-            style={styles.input}
-            value={velocity}
-            onChangeText={setVelocity}
-            keyboardType="numeric"
-          />
+        {/* Controls Card */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Projectile Controls</Text>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Velocity (m/s):</Text>
+            <TextInput
+              style={styles.input}
+              value={velocity}
+              onChangeText={setVelocity}
+              keyboardType="numeric"
+            />
+          </View>
 
-          <Text style={styles.label}>Angle (°):</Text>
-          <TextInput
-            style={styles.input}
-            value={angle}
-            onChangeText={setAngle}
-            keyboardType="numeric"
-          />
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Angle (°):</Text>
+            <TextInput
+              style={styles.input}
+              value={angle}
+              onChangeText={setAngle}
+              keyboardType="numeric"
+            />
+          </View>
 
-          <Text style={styles.label}>Gravity (m/s²):</Text>
-          <TextInput
-            style={styles.input}
-            value={gravity}
-            onChangeText={setGravity}
-            keyboardType="numeric"
-          />
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Gravity (m/s²):</Text>
+            <TextInput
+              style={styles.input}
+              value={gravity}
+              onChangeText={setGravity}
+              keyboardType="numeric"
+            />
+          </View>
 
-          <Text style={styles.label}>Target Distance (±5m):</Text>
-          <Text style={styles.valueText}>{targetDistance} m</Text>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Target Distance (±5m):</Text>
+            <Text style={styles.valueText}>{targetDistance} m</Text>
+          </View>
 
           <TouchableOpacity onPress={handleSimulate} style={styles.simButton}>
             <Text style={styles.simButtonText}>SIMULATE</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Simple "canvas" area for the trajectory */}
-        <View style={styles.chartContainer}>
-          <Svg width={width} height={height}>
-            {/* A baseline (ground) line */}
-            <Line
-              x1="0"
-              y1={height}
-              x2={width}
-              y2={height}
-              stroke="gray"
-              strokeWidth={2}
-            />
-            {/* The actual path of the projectile */}
-            {pathData && (
-              <Path d={pathData} fill="none" stroke="blue" strokeWidth={3} />
-            )}
-          </Svg>
+        {/* Chart Card */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Trajectory Visualization</Text>
+          <View style={styles.chartContainer}>
+            <Svg width={width} height={chartHeight}>
+              {/* Baseline (ground) */}
+              <Line
+                x1="20"
+                y1={chartHeight - 20}
+                x2={width - 20}
+                y2={chartHeight - 20}
+                stroke="gray"
+                strokeWidth={2}
+              />
+              {/* Projectile path */}
+              {pathData && (
+                <Path d={pathData} fill="none" stroke="blue" strokeWidth={3} />
+              )}
+            </Svg>
+          </View>
         </View>
 
-        {/* Back button */}
+        {/* Back Button */}
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Text style={styles.backButtonText}>Back to Boss Screen</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  /** Background image fills the screen. */
   background: {
     flex: 1,
   },
+  /** A semi-transparent overlay to darken the background slightly. */
   overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)", // dark overlay on top of boss image
-    padding: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
-  header: {
+  /** Content container for the ScrollView. */
+  content: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  /** Header area with title + boss health bar. */
+  headerContainer: {
     alignItems: "center",
-    marginTop: 40,
     marginBottom: 20,
   },
   title: {
-    fontSize: 24,
+    marginTop: 40,
+    fontSize: 26,
     color: "#FFD700",
     fontWeight: "bold",
     textShadowColor: "#000",
     textShadowRadius: 5,
+    marginBottom: 10,
   },
-  bossHealth: {
-    fontSize: 18,
-    color: "#FF4444",
-    marginTop: 10,
+  /**
+   * Health bar container & fill
+   * (like your bossScreen example).
+   */
+  healthBarContainer: {
+    width: "100%",
+    backgroundColor: "#333",
+    borderRadius: 10,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
   },
-  controls: {
+  healthBarFill: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "red",
+  },
+  healthText: {
+    zIndex: 2,
+    color: "#fff",
+    fontWeight: "bold",
+    margin: 5,
+  },
+  /** Common card style for controls and chart. */
+  card: {
     backgroundColor: "#FFF5E1",
     borderRadius: 16,
-    padding: 16,
-    marginHorizontal: 8,
     borderWidth: 2,
     borderColor: "#773737",
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#773737",
+    textAlign: "center",
+    marginBottom: 10,
+    textShadowColor: "#000",
+    textShadowRadius: 2,
+  },
+  formGroup: {
+    marginTop: 10,
   },
   label: {
     color: "#773737",
-    marginTop: 10,
     fontWeight: "bold",
   },
   input: {
@@ -274,7 +371,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   valueText: {
-    marginTop: 4,
+    marginTop: 6,
     fontWeight: "bold",
     color: "#333",
   },
@@ -286,10 +383,6 @@ const styles = StyleSheet.create({
     borderColor: "#773737",
     marginTop: 16,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
   },
   simButtonText: {
     color: "white",
@@ -298,14 +391,19 @@ const styles = StyleSheet.create({
     textShadowColor: "black",
     textShadowRadius: 9,
   },
+  /** Chart container for the SVG. */
   chartContainer: {
-    marginTop: 20,
-    alignItems: "center",
+    marginTop: 10,
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#CCC",
+    overflow: "hidden",
   },
+  /** The “Back to Boss Screen” button at the bottom. */
   backButton: {
-    marginTop: 20,
     alignSelf: "center",
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 20,
     backgroundColor: "#8B0000",
     borderRadius: 10,
