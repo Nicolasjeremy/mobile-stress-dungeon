@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,6 @@ import {
   Image,
   DimensionValue,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 
 // Firestore + Auth
 import { auth, db } from "../firebaseconfig";
@@ -20,14 +19,14 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
 const { height } = Dimensions.get("window");
 
-// Example roles data. Adjust images and text as you like.
+// Example roles data
 const ROLES = [
   {
     name: "Knight",
     description:
       "Knight adalah seorang ahli pedang terampil dengan serangan jarak dekat.",
     image: require("../assets/images/knight.png"),
-    route: "/knight",
+    route: "/archer",
   },
   {
     name: "Guardian",
@@ -41,62 +40,56 @@ const ROLES = [
     description:
       "Archer adalah pemanah ahli dengan serangan jarak jauh yang presisi.",
     image: require("../assets/images/archer.png"),
-    route: "/archer",
+    route: "/knight",
   },
   {
     name: "Sorcerer",
     description:
-      "Archer adalah pemanah ahli dengan serangan jarak jauh yang presisi.",
+      "Archer adalah pengendali sihir dengan serangan gravitasi dan control.",
     image: require("../assets/images/mage.png"),
     route: "/sorcerer",
   },
 ];
 
 export default function BossScreen() {
-  // Boss health from Firestore
   const [bossHealth, setBossHealth] = useState(100);
 
-  // Animated value for bottom sheet position.
-  const translateY = new Animated.Value(height);
+  // Persistent animated value using useRef
+  const translateY = useRef(new Animated.Value(height)).current;
 
-  useFocusEffect(
-    React.useCallback(() => {
-      // re-run the animation whenever BossScreen becomes focused
-      translateY.setValue(height);
-      Animated.timing(translateY, {
-        toValue: height / 2,
-        duration: 800,
-        useNativeDriver: false,
-      }).start();
-    }, [])
-  );
+  // Animate the bottom sheet only once when the component mounts
+  useEffect(() => {
+    Animated.timing(translateY, {
+      toValue: height / 2,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+  }, [translateY]);
 
   // Listen to boss health from Firestore
   useEffect(() => {
     const user = auth.currentUser;
-    if (!user) {
-      // If not signed in, skip or handle differently
-      return;
-    }
+    if (!user) return;
 
-    // Reference to this user’s boss doc
     const bossDocRef = doc(db, "boss", user.uid);
 
-    // Real-time listener
     const unsubscribe = onSnapshot(bossDocRef, async (docSnap) => {
       if (docSnap.exists()) {
-        // The document exists
         const data = docSnap.data();
         if (data.BossHealth !== undefined) {
           setBossHealth(data.BossHealth);
+
+          // Navigate to win screen only if health is exactly 0
+          if (data.BossHealth === 0) {
+            router.push("/win");
+            return; // stop further code in this callback
+          }
         }
       } else {
-        // No doc found => create one
+        // No doc => create one
         try {
-          await setDoc(bossDocRef, {
-            BossHealth: 100,
-          });
-          console.log("Created new boss document for user:", user.uid);
+          await setDoc(bossDocRef, { BossHealth: 100 });
+          console.log("Created new boss doc for user:", user.uid);
           setBossHealth(100);
         } catch (error) {
           console.error("Error creating boss doc:", error);
@@ -128,9 +121,7 @@ export default function BossScreen() {
         {/* TOP OVERLAY WITH BOSS NAME + HEALTH BAR */}
         <View style={styles.topOverlay}>
           <Text style={styles.bossName}>ODDOGARON, THE TOXIC WYVERN</Text>
-          {/* Health bar container */}
           <View style={styles.healthBarContainer}>
-            {/* Dynamic fill width */}
             <View style={[styles.healthBarFill, { width: healthBarWidth }]} />
             <Text style={styles.healthText}>{bossHealth} / 100</Text>
           </View>
@@ -141,7 +132,10 @@ export default function BossScreen() {
       <Animated.View
         style={[
           styles.bottomSheet,
-          { top: translateY, height: height / 2 }, // animate to half screen
+          {
+            transform: [{ translateY }],
+            height: height / 2,
+          },
         ]}
       >
         <Text style={styles.bottomSheetTitle}>SELECT YOUR ROLE!</Text>
@@ -167,19 +161,14 @@ export default function BossScreen() {
 }
 
 const styles = StyleSheet.create({
-  /* Container for entire screen */
   container: {
     flex: 1,
     backgroundColor: "#000",
   },
-
-  /* Full-screen boss background */
   background: {
     flex: 1,
     justifyContent: "flex-start",
   },
-
-  /* Boss name + health bar container (on top) */
   topOverlay: {
     paddingTop: 50,
     paddingHorizontal: 20,
@@ -214,8 +203,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     margin: 5,
   },
-
-  /* Animated bottom panel with roles */
   bottomSheet: {
     position: "absolute",
     left: 0,
@@ -238,8 +225,6 @@ const styles = StyleSheet.create({
   rolesContainer: {
     paddingBottom: 20,
   },
-
-  /* Individual role card */
   roleCard: {
     flexDirection: "row",
     backgroundColor: "#FFF5E1",

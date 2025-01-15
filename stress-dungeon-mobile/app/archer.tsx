@@ -147,6 +147,7 @@ export default function ArcherScreen() {
           <Text style={styles.cardTitle}>Motion Settings</Text>
 
           <View style={styles.formRow}>
+          <Text style={styles.label}>berikanlah dorongan untuk mendorong kotak biru sampai ke baagian kanan untuk menyerang boss</Text>
             <Text style={styles.label}>Force (N):</Text>
             <TextInput
               style={styles.input}

@@ -18,7 +18,7 @@ export default function IntroductionScreen() {
   // Called when the cloud animation completes
   const handleAnimationComplete = () => {
     // Navigate to the boss screen
-    router.push("/bossScreen");
+    router.replace("/bossScreen");
   };
 
   // If isAnimating is true, we show the cloud animation instead of the intro content
@@ -51,7 +51,14 @@ export default function IntroductionScreen() {
       <View style={styles.card}>
         <Text style={styles.title}>HOW TO PLAY</Text>
         <Text style={styles.description}>
-          Perjalananmu dimulai ...
+          Perjalananmu dimulai dengan memilih salah satu dari empat role yang
+          tersedia, masing-masing menawarkan cara unik untuk menghadapi boss.
+          Setiap role memiliki tantangan atau persoalan yang harus diselesaikan
+          sesuai dengan karakteristiknya. Setiap kali kamu berhasil
+          menyelesaikan persoalan tersebut, health boss akan berkurang. Teruslah
+          menyelesaikan tantangan hingga health boss mencapai 0 untuk
+          menaklukkan boss dan berhasil keluar dari Stress Dungeon. Pilih
+          strategimu dengan bijak dan kalahkan stres dengan cara yang seru!
         </Text>
       </View>
 

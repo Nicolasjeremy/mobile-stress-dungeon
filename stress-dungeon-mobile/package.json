@@ -21,7 +21,7 @@
     "@react-navigation/native": "^7.0.14",
     "@react-navigation/stack": "^7.1.1",
     "expo": "~52.0.17",
-    "expo-auth-session": "^6.0.2",
+    "expo-auth-session": "~6.0.2",
     "expo-blur": "~14.0.1",
     "expo-constants": "~17.0.3",
     "expo-font": "~13.0.1",
@@ -35,7 +35,7 @@
     "expo-symbols": "~0.2.0",
     "expo-system-ui": "~4.0.5",
     "expo-updates": "~0.26.12",
-    "expo-web-browser": "~14.0.1",
+    "expo-web-browser": "~14.0.2",
     "firebase": "^11.1.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -48,7 +48,8 @@
     "react-native-svg": "^15.11.1",
     "react-native-vector-icons": "^10.2.0",
     "react-native-web": "~0.19.13",
-    "react-native-webview": "13.12.5"
+    "react-native-webview": "13.12.5",
+    "expo-crypto": "~14.0.2"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

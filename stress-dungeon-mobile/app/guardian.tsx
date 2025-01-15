@@ -11,7 +11,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
-import Svg, { Circle, Rect } from "react-native-svg";
+import Svg, { Circle } from "react-native-svg";
 import Animated, {
   useSharedValue,
   useAnimatedProps,
@@ -20,86 +20,157 @@ import Animated, {
 } from "react-native-reanimated";
 
 // Canvas dimension references
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
-const CANVAS_HEIGHT = 300;
-const GROUND_HEIGHT = 50;
-const OBJECT_RADIUS = 20;
+const { width } = Dimensions.get("window");
+const CANVAS_HEIGHT = 220;
+const RADIUS = 20;
+
+// 1) Rename your collision function to avoid conflicts
+function computeCollisionVelocities(
+  m1: number,
+  v1: number,
+  m2: number,
+  v2: number,
+  type: "elastic" | "inelastic"
+) {
+  if (type === "elastic") {
+    const v1Final = ((m1 - m2) * v1 + 2 * m2 * v2) / (m1 + m2);
+    const v2Final = ((m2 - m1) * v2 + 2 * m1 * v1) / (m1 + m2);
+    return [v1Final, v2Final];
+  } else {
+    const finalVelocity = (m1 * v1 + m2 * v2) / (m1 + m2);
+    return [finalVelocity, finalVelocity];
+  }
+}
 
 // Animated version of the <Circle> from react-native-svg
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-export default function SorcererGravityScreen() {
+export default function GuardianScreen() {
   const router = useRouter();
 
   // User Inputs
-  const [mass, setMass] = useState("1");
-  const [initialHeight, setInitialHeight] = useState("10");
-  const [initialVelocity, setInitialVelocity] = useState("0");
+  const [mass1, setMass1] = useState("2");
+  const [velocity1, setVelocity1] = useState("3");
+  const [mass2, setMass2] = useState("4");
+  const [velocity2, setVelocity2] = useState("-2");
+  const [collisionType, setCollisionType] = useState<"elastic" | "inelastic">(
+    "elastic"
+  );
+
+  // Momentum & Energy
+  const [momentumBefore, setMomentumBefore] = useState(0);
+  const [momentumAfter, setMomentumAfter] = useState(0);
+  const [energyBefore, setEnergyBefore] = useState(0);
+  const [energyAfter, setEnergyAfter] = useState(0);
 
   // Reanimated shared values
-  const objectY = useSharedValue(0);
-  const objectVelocity = useSharedValue(0);
-  const simulatingRef = useSharedValue(0); // 0 = not simulating, 1 = simulating
-  const elapsedTime = useSharedValue(0);
+  const circle1X = useSharedValue(RADIUS + 50);
+  const circle1V = useSharedValue(0);
+
+  const circle2X = useSharedValue(width - RADIUS - 50);
+  const circle2V = useSharedValue(0);
 
   const [isSimulating, setIsSimulating] = useState(false);
+  const simulatingRef = useSharedValue(0); // 0 = not simulating, 1 = simulating
 
-  // Animated props for the object
-  const objectProps = useAnimatedProps(() => ({
-    cy: CANVAS_HEIGHT - GROUND_HEIGHT - objectY.value,
-  }));
+  // Animated props for each circle
+  const circle1Props = useAnimatedProps(() => ({ cx: circle1X.value }));
+  const circle2Props = useAnimatedProps(() => ({ cx: circle2X.value }));
 
-  // Physics constants
-  const GRAVITY = 9.8;
-
-  // Derived value for simulation logic
   useDerivedValue(() => {
     if (simulatingRef.value === 0) return;
 
     const dt = 1 / 60;
-    elapsedTime.value += dt;
 
-    // Gravity in px/s^2
-    const gravityInPixels = 9.8 * METER_TO_PX;
+    // Move circles
+    circle1X.value += circle1V.value * dt;
+    circle2X.value += circle2V.value * dt;
 
-    // Update velocity (downward => velocity grows negative if you treat y=0 at bottom)
-    // Or invert signs if your coordinate system is reversed
-    objectVelocity.value -= gravityInPixels * dt;
+    // define the collision logic inline
+    function collisionFn(
+      m1: number,
+      v1: number,
+      m2: number,
+      v2: number,
+      type: "elastic" | "inelastic"
+    ): [number, number] {
+      "worklet"; // The function itself is a mini-worklet
+      if (type === "elastic") {
+        const v1Final = ((m1 - m2) * v1 + 2 * m2 * v2) / (m1 + m2);
+        const v2Final = ((m2 - m1) * v2 + 2 * m1 * v1) / (m1 + m2);
+        return [v1Final, v2Final];
+      } else {
+        const finalVelocity = (m1 * v1 + m2 * v2) / (m1 + m2);
+        return [finalVelocity, finalVelocity];
+      }
+    }
 
-    // Update position
-    objectY.value += objectVelocity.value * dt;
+    // collision check
+    if (
+      circle2X.value - circle1X.value <= RADIUS * 2 &&
+      circle1V.value > 0 &&
+      circle2V.value < 0
+    ) {
+      const m1 = parseFloat(mass1);
+      const m2 = parseFloat(mass2);
+      const [v1After, v2After] = collisionFn(
+        m1,
+        circle1V.value,
+        m2,
+        circle2V.value,
+        collisionType
+      );
+      circle1V.value = v1After;
+      circle2V.value = v2After;
+    }
 
-    // Ground collision check
-    if (objectY.value <= 0) {
-      objectY.value = 0;
-      objectVelocity.value = 0;
+    // if off-screen, stop
+    if (circle1X.value > width + RADIUS || circle2X.value < -RADIUS) {
       simulatingRef.value = 0;
       runOnJS(setIsSimulating)(false);
     }
-  });
-
-  const METER_TO_PX = 20; // or whatever scale you like
+  }, [mass1, mass2, collisionType]);
 
   const handleSimulate = () => {
-    const parsedMass = parseFloat(mass);
-    const parsedHeight = parseFloat(initialHeight);
-    const parsedVelocity = parseFloat(initialVelocity);
+    const m1 = parseFloat(mass1);
+    const v1 = parseFloat(velocity1);
+    const m2 = parseFloat(mass2);
+    const v2 = parseFloat(velocity2);
 
-    // Validate inputs
-    if ([parsedMass, parsedHeight, parsedVelocity].some(Number.isNaN)) {
-      Alert.alert("Error", "Please enter valid numbers...");
+    if ([m1, v1, m2, v2].some(Number.isNaN)) {
+      Alert.alert("Error", "Please enter valid numbers for mass & velocity.");
       return;
     }
 
-    // Reset shared values using the chosen scale
-    objectY.value = parsedHeight * METER_TO_PX;
-    objectVelocity.value = parsedVelocity * METER_TO_PX;
-    elapsedTime.value = 0;
+    // Reset circles
+    circle1X.value = RADIUS + 50;
+    circle2X.value = width - RADIUS - 50;
+    circle1V.value = v1;
+    circle2V.value = v2;
 
-    // Make sure simulatingRef is reset
-    simulatingRef.value = 0;
+    // Momentum & energy before
+    const pBefore = m1 * v1 + m2 * v2;
+    const eBefore = 0.5 * m1 * v1 ** 2 + 0.5 * m2 * v2 ** 2;
+    setMomentumBefore(pBefore);
+    setEnergyBefore(eBefore);
 
-    // Now start
+    // Compute after-collision for display
+    let v1After, v2After;
+    if (collisionType === "elastic") {
+      v1After = ((m1 - m2) * v1 + 2 * m2 * v2) / (m1 + m2);
+      v2After = ((m2 - m1) * v2 + 2 * m1 * v1) / (m1 + m2);
+    } else {
+      const finalV = (m1 * v1 + m2 * v2) / (m1 + m2);
+      v1After = finalV;
+      v2After = finalV;
+    }
+
+    const pAfter = m1 * v1After + m2 * v2After;
+    const eAfter = 0.5 * m1 * v1After ** 2 + 0.5 * m2 * v2After ** 2;
+    setMomentumAfter(pAfter);
+    setEnergyAfter(eAfter);
+
+    // Start the simulation
     setIsSimulating(true);
     simulatingRef.value = 1;
   };
@@ -110,7 +181,7 @@ export default function SorcererGravityScreen() {
   };
 
   const handleBack = () => {
-    router.back();
+    router.push("/bossScreen");
   };
 
   return (
@@ -119,47 +190,91 @@ export default function SorcererGravityScreen() {
       style={styles.background}
       resizeMode="cover"
     >
+      {/* Scrollable layout */}
       <ScrollView style={styles.overlay} contentContainerStyle={styles.content}>
         <View style={styles.headerContainer}>
-          <Text style={styles.title}>SORCERER'S GRAVITY LAB</Text>
-          <Text style={styles.subtitle}>Falling Object Simulation</Text>
+          <Text style={styles.title}>GUARDIAN TRAINING</Text>
+          <Text style={styles.subtitle}>Real-Time Collision</Text>
         </View>
 
-        {/* Object Properties */}
+        {/* Collision Controls */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Object Settings</Text>
+          <Text style={styles.cardTitle}>Collision Settings</Text>
 
           <View style={styles.formRow}>
-            <Text style={styles.label}>Mass (kg):</Text>
+            <Text style={styles.label}>Mass 1 (kg):</Text>
             <TextInput
               style={styles.input}
-              value={mass}
-              onChangeText={setMass}
+              value={mass1}
+              onChangeText={setMass1}
               keyboardType="numeric"
-              editable={!isSimulating}
+            />
+          </View>
+          <View style={styles.formRow}>
+            <Text style={styles.label}>Velocity 1 (m/s):</Text>
+            <TextInput
+              style={styles.input}
+              value={velocity1}
+              onChangeText={setVelocity1}
+              keyboardType="numeric"
+            />
+          </View>
+          <View style={styles.formRow}>
+            <Text style={styles.label}>Mass 2 (kg):</Text>
+            <TextInput
+              style={styles.input}
+              value={mass2}
+              onChangeText={setMass2}
+              keyboardType="numeric"
+            />
+          </View>
+          <View style={styles.formRow}>
+            <Text style={styles.label}>Velocity 2 (m/s):</Text>
+            <TextInput
+              style={styles.input}
+              value={velocity2}
+              onChangeText={setVelocity2}
+              keyboardType="numeric"
             />
           </View>
 
           <View style={styles.formRow}>
-            <Text style={styles.label}>Initial Height (m):</Text>
-            <TextInput
-              style={styles.input}
-              value={initialHeight}
-              onChangeText={setInitialHeight}
-              keyboardType="numeric"
-              editable={!isSimulating}
-            />
-          </View>
+            <Text style={styles.label}>Collision Type:</Text>
+            <View style={{ flexDirection: "row", marginTop: 6 }}>
+              <TouchableOpacity
+                style={[
+                  styles.toggleButton,
+                  collisionType === "elastic" && styles.toggleSelected,
+                ]}
+                onPress={() => setCollisionType("elastic")}
+              >
+                <Text
+                  style={[
+                    styles.toggleText,
+                    collisionType === "elastic" && styles.toggleTextSelected,
+                  ]}
+                >
+                  Elastic
+                </Text>
+              </TouchableOpacity>
 
-          <View style={styles.formRow}>
-            <Text style={styles.label}>Initial Velocity (m/s):</Text>
-            <TextInput
-              style={styles.input}
-              value={initialVelocity}
-              onChangeText={setInitialVelocity}
-              keyboardType="numeric"
-              editable={!isSimulating}
-            />
+              <TouchableOpacity
+                style={[
+                  styles.toggleButton,
+                  collisionType === "inelastic" && styles.toggleSelected,
+                ]}
+                onPress={() => setCollisionType("inelastic")}
+              >
+                <Text
+                  style={[
+                    styles.toggleText,
+                    collisionType === "inelastic" && styles.toggleTextSelected,
+                  ]}
+                >
+                  Inelastic
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Simulate or Stop */}
@@ -177,52 +292,46 @@ export default function SorcererGravityScreen() {
           )}
         </View>
 
-        {/* Simulation Statistics */}
+        {/* Momentum / Energy Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Simulation Stats</Text>
+          <Text style={styles.cardTitle}>Momentum & Energy</Text>
           <View style={styles.resultRow}>
-            <Text style={styles.resultLabel}>Current Height:</Text>
-            <Text style={styles.resultValue}>
-              {isSimulating
-                ? (CANVAS_HEIGHT - GROUND_HEIGHT - objectY.value).toFixed(2)
-                : initialHeight}{" "}
-              m
-            </Text>
+            <Text style={styles.resultLabel}>Momentum Before:</Text>
+            <Text style={styles.resultValue}>{momentumBefore.toFixed(2)}</Text>
           </View>
           <View style={styles.resultRow}>
-            <Text style={styles.resultLabel}>Velocity:</Text>
-            <Text style={styles.resultValue}>
-              {objectVelocity.value.toFixed(2)} m/s
-            </Text>
+            <Text style={styles.resultLabel}>Momentum After:</Text>
+            <Text style={styles.resultValue}>{momentumAfter.toFixed(2)}</Text>
           </View>
           <View style={styles.resultRow}>
-            <Text style={styles.resultLabel}>Time:</Text>
-            <Text style={styles.resultValue}>
-              {elapsedTime.value.toFixed(2)} s
-            </Text>
+            <Text style={styles.resultLabel}>Energy Before:</Text>
+            <Text style={styles.resultValue}>{energyBefore.toFixed(2)}</Text>
+          </View>
+          <View style={styles.resultRow}>
+            <Text style={styles.resultLabel}>Energy After:</Text>
+            <Text style={styles.resultValue}>{energyAfter.toFixed(2)}</Text>
           </View>
         </View>
 
-        {/* Visualization */}
+        {/* Visualization Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Falling Object</Text>
+          <Text style={styles.cardTitle}>Collision Visualization</Text>
           <View style={styles.canvasContainer}>
-            <Svg width="100%" height={CANVAS_HEIGHT}>
-              {/* Ground */}
-              <Rect
-                x="0"
-                y={CANVAS_HEIGHT - GROUND_HEIGHT}
-                width="100%"
-                height={GROUND_HEIGHT}
-                fill="#8B4513"
+            <Svg width={width} height={CANVAS_HEIGHT}>
+              {/* Blue circle with Reanimated props */}
+              <AnimatedCircle
+                animatedProps={circle1Props}
+                cy={CANVAS_HEIGHT / 2}
+                r={RADIUS}
+                fill="blue"
               />
 
-              {/* Falling Object */}
+              {/* Red circle with Reanimated props */}
               <AnimatedCircle
-                animatedProps={objectProps}
-                cx="50%"
-                r={OBJECT_RADIUS}
-                fill="#FF6347"
+                animatedProps={circle2Props}
+                cy={CANVAS_HEIGHT / 2}
+                r={RADIUS}
+                fill="red"
               />
             </Svg>
           </View>
@@ -237,7 +346,7 @@ export default function SorcererGravityScreen() {
   );
 }
 
-// Styles (same as previous screens)
+// ========== STYLES ==========
 const styles = StyleSheet.create({
   background: {
     flex: 1,
@@ -303,6 +412,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#CCC",
     marginBottom: 6,
+  },
+  toggleButton: {
+    marginRight: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 2,
+    borderColor: "#773737",
+    borderRadius: 8,
+    backgroundColor: "#FFF5E1",
+  },
+  toggleSelected: {
+    backgroundColor: "#DDA15E",
+  },
+  toggleText: {
+    color: "#773737",
+    fontWeight: "bold",
+  },
+  toggleTextSelected: {
+    color: "#FFF",
   },
   simButton: {
     marginTop: 16,

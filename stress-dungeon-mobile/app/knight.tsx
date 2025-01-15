@@ -128,7 +128,7 @@ export default function KnightScreen() {
 
           // Subtract 25
           await updateDoc(bossDocRef, {
-            BossHealth: increment(-25),
+            BossHealth: Math.max(bossHealth - 25, 0),
           });
         }
       } catch (error) {
@@ -153,7 +153,7 @@ export default function KnightScreen() {
   };
 
   const handleBack = () => {
-    router.back();
+    router.replace("/bossScreen");
   };
 
   // For SVG chart

@@ -1,3 +1,4 @@
+// app/sorcererJumpScreen.tsx
 import React, { useState, useRef } from "react";
 import {
   View,
@@ -13,94 +14,94 @@ import {
 import { useRouter } from "expo-router";
 import Svg, { Rect } from "react-native-svg";
 
-// We'll do a manual requestAnimationFrame approach for a jump-with-gravity demo.
+import { doc, updateDoc, increment } from "firebase/firestore";
+import { auth, db } from "../firebaseconfig";
 
+// Canvas and physics constants
 const { width } = Dimensions.get("window");
-const CANVAS_HEIGHT = 220; // height for the SVG
-const TIME_STEP = 0.1; // simulation timestep in seconds
-const GRAVITY = 9.8; // gravitational acceleration (m/s^2)
+const CANVAS_HEIGHT = 220;
+const TIME_STEP = 0.1; // Time step for simulation
+const GRAVITY = 9.8; // Gravity constant
+const FLOOR_Y = CANVAS_HEIGHT - 40; // Position of the floor on the canvas
 
-// Position of the "floor" (where the object starts and lands).
-// We’ll define it slightly above the bottom of the SVG so we can see the object.
-const FLOOR_Y = CANVAS_HEIGHT - 40;
-
-export default function JumpLabScreen() {
+export default function SorcererJumpScreen() {
   const router = useRouter();
 
-  // User inputs
+  // User inputs for jump simulation
   const [jumpForce, setJumpForce] = useState("50");
   const [mass, setMass] = useState("5");
 
-  // Track simulation state
+  // State and refs to track simulation
   const [isSimulating, setIsSimulating] = useState(false);
+  const positionRef = useRef(FLOOR_Y); // Position of the jumping object
+  const velocityRef = useRef(0); // Velocity of the object
+  const animationRef = useRef<number | null>(null); // Reference for the animation frame
+  const [renderKey, setRenderKey] = useState(0); // Re-render key for the rectangle
 
-  // Refs for position & velocity in the vertical direction (y-axis)
-  // We'll treat y=0 at the top, y increases downward.
-  const positionRef = useRef(FLOOR_Y); // start at floor
-  const velocityRef = useRef(0); // start with zero velocity
-  const animationRef = useRef<number | null>(null);
-
-  // Force a re-render for the object’s position in <Svg>
-  const [renderKey, setRenderKey] = useState(0);
-
-  // Start the simulation
+  // Handle simulation start
   const handleSimulate = () => {
-    const F = parseFloat(jumpForce);
-    const m = parseFloat(mass);
+    const force = parseFloat(jumpForce);
+    const massValue = parseFloat(mass);
 
-    if ([F, m].some(Number.isNaN)) {
-      Alert.alert(
-        "Error",
-        "Please enter valid numbers for jump force and mass."
-      );
+    if ([force, massValue].some(Number.isNaN)) {
+      Alert.alert("Invalid Input", "Please enter valid numbers.");
       return;
     }
 
-    // Convert jump force to an initial velocity (negative = upward if y increases downward)
-    const vInitial = -F / m;
-
-    // If initial velocity is >= 0, we can't go up
-    if (vInitial >= 0) {
-      Alert.alert(
-        "Not Enough Force",
-        "Your jump force is not large enough to overcome gravity."
-      );
+    // Initial velocity calculation
+    const initialVelocity = -force / massValue;
+    if (initialVelocity >= 0) {
+      Alert.alert("Error", "The jump force is not sufficient to lift the object.");
       return;
     }
 
     // Reset position and velocity
     positionRef.current = FLOOR_Y;
-    velocityRef.current = vInitial;
-
+    velocityRef.current = initialVelocity;
     setIsSimulating(true);
 
-    // Cancel any old animation loop
+    // Start the animation loop
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
     }
-    // Start a new loop
-    animationRef.current = requestAnimationFrame(() => animate());
+    animationRef.current = requestAnimationFrame(animate);
   };
 
-  // The “game loop” using requestAnimationFrame
+  // Main animation loop
   const animate = () => {
-    // Add gravity to velocity (gravity is positive since down is increasing y)
     velocityRef.current += GRAVITY * TIME_STEP;
-
-    // Update position
     positionRef.current += velocityRef.current * TIME_STEP;
 
-    // Check if object has hit the floor
+    // Handle floor collision
     if (positionRef.current >= FLOOR_Y) {
-      // Snap to floor, stop simulation
       positionRef.current = FLOOR_Y;
       setIsSimulating(false);
+
+      // Check if jump height exceeds the threshold
+      const maxHeight = Math.pow(-velocityRef.current, 2) / (2 * GRAVITY);
+      if (maxHeight >= 10) {
+        // Update boss health if jump is successful
+        const user = auth.currentUser;
+        if (user) {
+          const bossDocRef = doc(db, "boss", user.uid);
+          updateDoc(bossDocRef, {
+            BossHealth: increment(-25),
+          })
+            .then(() => {
+              Alert.alert("Success!", "You jumped more than 10 meters! Boss health -25.");
+            })
+            .catch((err) => {
+              console.error("Error updating boss health:", err);
+            });
+        }
+      }
+
       return;
     }
 
-    // Otherwise, re-render and keep going
+    // Re-render the canvas
     setRenderKey((prev) => prev + 1);
-    animationRef.current = requestAnimationFrame(() => animate());
+    animationRef.current = requestAnimationFrame(animate);
   };
 
   // Stop the simulation
@@ -111,21 +112,22 @@ export default function JumpLabScreen() {
     setIsSimulating(false);
   };
 
-  // Navigate back to some screen (e.g. boss screen or hero selection)
+  // Handle navigation back to the Boss Screen
   const handleBack = () => {
-    router.back();
+    router.replace("/bossScreen");
   };
 
   return (
     <ImageBackground
-      source={require("../assets/images/boss.png")} // your background image
+      source={require("../assets/images/boss.png")}
       style={styles.background}
       resizeMode="cover"
     >
       <ScrollView style={styles.overlay} contentContainerStyle={styles.content}>
+        {/* Header */}
         <View style={styles.headerContainer}>
-          <Text style={styles.title}>JUMP LAB</Text>
-          <Text style={styles.subtitle}>Gravity-Based Motion</Text>
+          <Text style={styles.title}>SORCERER JUMP LAB</Text>
+          <Text style={styles.subtitle}>Gravity-Based Motion Simulation</Text>
         </View>
 
         {/* Input Card */}
@@ -139,6 +141,7 @@ export default function JumpLabScreen() {
               value={jumpForce}
               onChangeText={setJumpForce}
               keyboardType="numeric"
+              editable={!isSimulating}
             />
           </View>
 
@@ -149,6 +152,7 @@ export default function JumpLabScreen() {
               value={mass}
               onChangeText={setMass}
               keyboardType="numeric"
+              editable={!isSimulating}
             />
           </View>
 
@@ -157,10 +161,7 @@ export default function JumpLabScreen() {
               <Text style={styles.simButtonText}>SIMULATE</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity
-              onPress={handleStop}
-              style={[styles.simButton, { backgroundColor: "#555" }]}
-            >
+            <TouchableOpacity onPress={handleStop} style={[styles.simButton, { backgroundColor: "#555" }]}>
               <Text style={styles.simButtonText}>STOP</Text>
             </TouchableOpacity>
           )}
@@ -171,15 +172,7 @@ export default function JumpLabScreen() {
           <Text style={styles.cardTitle}>Motion Visualization</Text>
           <View style={styles.canvasContainer}>
             <Svg width={width} height={CANVAS_HEIGHT} key={renderKey}>
-              {/* "Object" as a rectangle that moves vertically */}
-              <Rect
-                x={width / 2 - 20} // center the object horizontally
-                y={positionRef.current - 40} // top of the object
-                width={40}
-                height={40}
-                fill="blue"
-              />
-              {/* Floor */}
+              <Rect x={width / 2 - 20} y={positionRef.current - 40} width={40} height={40} fill="blue" />
               <Rect x={0} y={FLOOR_Y} width={width} height={2} fill="gray" />
             </Svg>
           </View>
@@ -187,13 +180,14 @@ export default function JumpLabScreen() {
 
         {/* Back Button */}
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>Back to Hero Selection</Text>
+          <Text style={styles.backButtonText}>Back to Boss Screen</Text>
         </TouchableOpacity>
       </ScrollView>
     </ImageBackground>
   );
 }
 
+// Styles
 const styles = StyleSheet.create({
   background: {
     flex: 1,
@@ -240,8 +234,6 @@ const styles = StyleSheet.create({
     color: "#773737",
     fontWeight: "bold",
     textAlign: "center",
-    textShadowColor: "#000",
-    textShadowRadius: 2,
     marginBottom: 10,
   },
   formRow: {
