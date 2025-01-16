@@ -18,6 +18,7 @@ import Animated, {
   useDerivedValue,
   runOnJS,
 } from "react-native-reanimated";
+import { updateBossHealth } from "./updateBossHealth";
 
 // Canvas dimension references
 const { width } = Dimensions.get("window");

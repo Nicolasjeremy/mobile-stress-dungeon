@@ -12,14 +12,11 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import Svg, { Rect } from "react-native-svg";
-
-// Firestore + Auth imports
-import { doc, updateDoc, increment } from "firebase/firestore";
-import { auth, db } from "../firebaseconfig";
+import { updateBossHealth } from "./updateBossHealth";
 
 const { width } = Dimensions.get("window");
 const CANVAS_HEIGHT = 220;
-const TIME_STEP = 0.1; // simulation timestep in seconds
+const TIME_STEP = 0.1; // Simulation timestep in seconds
 
 export default function ArcherScreen() {
   const router = useRouter();
@@ -54,7 +51,7 @@ export default function ArcherScreen() {
       return;
     }
 
-    // friction force
+    // Calculate friction force
     const frictionForce = mu * m * 9.8;
     const netForce = F - frictionForce;
 
@@ -66,16 +63,16 @@ export default function ArcherScreen() {
       return;
     }
 
-    // acceleration
+    // Acceleration
     const a = netForce / m;
 
-    // reset position & velocity
+    // Reset position & velocity
     positionRef.current = 0;
     velocityRef.current = 0;
 
     setIsSimulating(true);
 
-    // start the animation
+    // Start the animation
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
     }
@@ -92,28 +89,16 @@ export default function ArcherScreen() {
     if (positionRef.current > width) {
       setIsSimulating(false);
 
-      const user = auth.currentUser;
-      if (user) {
-        const bossDocRef = doc(db, "boss", user.uid);
+      // Decrement boss health by 20
+      updateBossHealth(-20);
 
-        // Subtract 20 from BossHealth
-        updateDoc(bossDocRef, {
-          BossHealth: increment(-20),
-        })
-          .then(() => {
-            console.log("Boss health decremented by 20");
-          })
-          .catch((error) => {
-            console.error("Error decrementing boss health:", error);
-          });
-      }
       return;
     }
 
     // Otherwise, re-draw
     setRenderKey((prev) => prev + 1);
 
-    // schedule next frame
+    // Schedule next frame
     animationRef.current = requestAnimationFrame(() => animate(acceleration));
   };
 
@@ -147,7 +132,9 @@ export default function ArcherScreen() {
           <Text style={styles.cardTitle}>Motion Settings</Text>
 
           <View style={styles.formRow}>
-          <Text style={styles.label}>berikanlah dorongan untuk mendorong kotak biru sampai ke baagian kanan untuk menyerang boss</Text>
+            <Text style={styles.label}>
+              Push the blue box to the right to attack the boss.
+            </Text>
             <Text style={styles.label}>Force (N):</Text>
             <TextInput
               style={styles.input}

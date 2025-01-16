@@ -16,7 +16,8 @@ import Svg, { Path, Line } from "react-native-svg";
 
 // Firebase
 import { auth, db } from "../firebaseconfig";
-import { doc, onSnapshot, updateDoc, increment } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
+import { updateBossHealth } from "./updateBossHealth";
 
 // Helper: generate random target within [min, max]
 function generateRandomTarget(min: number, max: number) {
@@ -48,9 +49,6 @@ function calculateTrajectoryPoints(
 export default function KnightScreen() {
   const router = useRouter();
 
-  // Boss health from Firestore
-  const [bossHealth, setBossHealth] = useState(100);
-
   // Inputs
   const [velocity, setVelocity] = useState("20");
   const [angle, setAngle] = useState("45");
@@ -63,32 +61,6 @@ export default function KnightScreen() {
   const [trajectoryPoints, setTrajectoryPoints] = useState<
     Array<{ x: number; y: number }>
   >([]);
-
-  // 1) Listen for changes to BossHealth from Firestore
-  useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) {
-      // not signed in? optionally navigate to login, or just skip
-      return;
-    }
-
-    // Reference to this user’s boss doc
-    const bossDocRef = doc(db, "boss", user.uid);
-
-    // Subscribe to real-time changes
-    const unsubscribe = onSnapshot(bossDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.BossHealth !== undefined) {
-          setBossHealth(data.BossHealth);
-        }
-      } else {
-        console.log("No boss doc found for this user.");
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   // Generate random target at mount
   useEffect(() => {
@@ -120,29 +92,12 @@ export default function KnightScreen() {
     // Check if user hits target
     const difference = Math.abs(maxDistance - targetDistance);
     if (difference <= 5) {
-      // 2) Decrement boss health in Firestore
+      // Deal damage to the boss
       try {
-        const user = auth.currentUser;
-        if (user) {
-          const bossDocRef = doc(db, "boss", user.uid);
-
-          // Subtract 25
-          await updateDoc(bossDocRef, {
-            BossHealth: Math.max(bossHealth - 25, 0),
-          });
-        }
+        await updateBossHealth(-25); // Use the helper to decrement boss health by 25
+        Alert.alert("Hit!", "Great shot! Boss health updated.");
       } catch (error) {
-        console.log("Error decrementing boss health:", error);
-      }
-
-      // We *also* see local state changes because of the Firestore onSnapshot
-      if (bossHealth - 25 <= 0) {
-        Alert.alert("Boss Defeated!", "You have vanquished the boss!");
-      } else {
-        Alert.alert(
-          "Hit!",
-          `Great shot! Boss health is now ${bossHealth - 25}.`
-        );
+        console.log("Error updating boss health:", error);
       }
     } else {
       Alert.alert(
@@ -181,27 +136,19 @@ export default function KnightScreen() {
     }
   });
 
-  // For the health bar, compute width as a percentage
-  const healthPercentage = Math.max(0, bossHealth); // clamp at 0
-  const healthBarWidth = `${(healthPercentage / 100) * 100}%` as DimensionValue; // e.g. "75%"
-
   return (
     <ImageBackground
       source={require("../assets/images/boss.png")}
       style={styles.background}
       resizeMode="cover"
     >
-      {/* Scrollable content */}
       <ScrollView style={styles.overlay} contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.headerContainer}>
           <Text style={styles.title}>KNIGHT TRAINING</Text>
-
-          {/* Health bar that matches Firestore value */}
-          <View style={styles.healthBarContainer}>
-            <View style={[styles.healthBarFill, { width: healthBarWidth }]} />
-            <Text style={styles.healthText}>{bossHealth} / 100</Text>
-          </View>
+          <Text style={styles.subtitle}>
+            Complete the training to deal damage to the boss!
+          </Text>
         </View>
 
         {/* Controls Card */}
@@ -252,7 +199,6 @@ export default function KnightScreen() {
           <Text style={styles.cardTitle}>Trajectory Visualization</Text>
           <View style={styles.chartContainer}>
             <Svg width={width} height={chartHeight}>
-              {/* Baseline (ground) */}
               <Line
                 x1="20"
                 y1={chartHeight - 20}
@@ -261,7 +207,6 @@ export default function KnightScreen() {
                 stroke="gray"
                 strokeWidth={2}
               />
-              {/* Projectile path */}
               {pathData && (
                 <Path d={pathData} fill="none" stroke="blue" strokeWidth={3} />
               )}
@@ -279,26 +224,21 @@ export default function KnightScreen() {
 }
 
 const styles = StyleSheet.create({
-  /** Background image fills the screen. */
   background: {
     flex: 1,
   },
-  /** A semi-transparent overlay to darken the background slightly. */
   overlay: {
     backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
-  /** Content container for the ScrollView. */
   content: {
     padding: 16,
     paddingBottom: 40,
   },
-  /** Header area with title + boss health bar. */
   headerContainer: {
     alignItems: "center",
     marginBottom: 20,
   },
   title: {
-    marginTop: 40,
     fontSize: 26,
     color: "#FFD700",
     fontWeight: "bold",
@@ -306,33 +246,10 @@ const styles = StyleSheet.create({
     textShadowRadius: 5,
     marginBottom: 10,
   },
-  /**
-   * Health bar container & fill
-   * (like your bossScreen example).
-   */
-  healthBarContainer: {
-    width: "100%",
-    backgroundColor: "#333",
-    borderRadius: 10,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
+  subtitle: {
+    fontSize: 16,
+    color: "#FFF",
   },
-  healthBarFill: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: "red",
-  },
-  healthText: {
-    zIndex: 2,
-    color: "#fff",
-    fontWeight: "bold",
-    margin: 5,
-  },
-  /** Common card style for controls and chart. */
   card: {
     backgroundColor: "#FFF5E1",
     borderRadius: 16,
@@ -340,11 +257,6 @@ const styles = StyleSheet.create({
     borderColor: "#773737",
     padding: 16,
     marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
   },
   cardTitle: {
     fontSize: 18,
@@ -352,8 +264,6 @@ const styles = StyleSheet.create({
     color: "#773737",
     textAlign: "center",
     marginBottom: 10,
-    textShadowColor: "#000",
-    textShadowRadius: 2,
   },
   formGroup: {
     marginTop: 10,
@@ -379,28 +289,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#DDA15E",
     padding: 15,
     borderRadius: 20,
-    borderWidth: 4,
-    borderColor: "#773737",
     marginTop: 16,
     alignItems: "center",
   },
   simButtonText: {
-    color: "white",
+    color: "#FFF",
     fontSize: 18,
     fontWeight: "bold",
-    textShadowColor: "black",
-    textShadowRadius: 9,
   },
-  /** Chart container for the SVG. */
   chartContainer: {
     marginTop: 10,
     backgroundColor: "#FFF",
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#CCC",
     overflow: "hidden",
   },
-  /** The “Back to Boss Screen” button at the bottom. */
   backButton: {
     alignSelf: "center",
     paddingVertical: 12,
@@ -409,7 +311,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   backButtonText: {
-    color: "#fff",
+    color: "#FFF",
     fontSize: 16,
   },
 });

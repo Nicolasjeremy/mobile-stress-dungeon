@@ -18,7 +18,8 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/frame1.png"
-      }
+      },
+      "package": "com.eatflame.stressdungeonmobile"
     },
     "web": {
       "bundler": "metro",

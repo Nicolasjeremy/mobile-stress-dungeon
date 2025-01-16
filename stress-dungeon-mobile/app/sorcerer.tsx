@@ -1,4 +1,3 @@
-// app/sorcererJumpScreen.tsx
 import React, { useState, useRef } from "react";
 import {
   View,
@@ -8,14 +7,15 @@ import {
   StyleSheet,
   ImageBackground,
   Alert,
+  
   Dimensions,
   ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import Svg, { Rect } from "react-native-svg";
 
-import { doc, updateDoc, increment } from "firebase/firestore";
-import { auth, db } from "../firebaseconfig";
+// Firebase imports
+import { updateBossHealth } from "./updateBossHealth"; // Shared function for health updates
 
 // Canvas and physics constants
 const { width } = Dimensions.get("window");
@@ -51,7 +51,10 @@ export default function SorcererJumpScreen() {
     // Initial velocity calculation
     const initialVelocity = -force / massValue;
     if (initialVelocity >= 0) {
-      Alert.alert("Error", "The jump force is not sufficient to lift the object.");
+      Alert.alert(
+        "Error",
+        "The jump force is not sufficient to lift the object."
+      );
       return;
     }
 
@@ -68,7 +71,7 @@ export default function SorcererJumpScreen() {
   };
 
   // Main animation loop
-  const animate = () => {
+  const animate = async () => {
     velocityRef.current += GRAVITY * TIME_STEP;
     positionRef.current += velocityRef.current * TIME_STEP;
 
@@ -80,20 +83,17 @@ export default function SorcererJumpScreen() {
       // Check if jump height exceeds the threshold
       const maxHeight = Math.pow(-velocityRef.current, 2) / (2 * GRAVITY);
       if (maxHeight >= 10) {
-        // Update boss health if jump is successful
-        const user = auth.currentUser;
-        if (user) {
-          const bossDocRef = doc(db, "boss", user.uid);
-          updateDoc(bossDocRef, {
-            BossHealth: increment(-25),
-          })
-            .then(() => {
-              Alert.alert("Success!", "You jumped more than 10 meters! Boss health -25.");
-            })
-            .catch((err) => {
-              console.error("Error updating boss health:", err);
-            });
+        try {
+          await updateBossHealth(-25); // Use shared function to deal 25 damage
+          Alert.alert(
+            "Success!",
+            "You jumped more than 10 meters! Boss health -25."
+          );
+        } catch (err) {
+          console.error("Error updating boss health:", err);
         }
+      } else {
+        Alert.alert("Try Again!", "You couldn't jump high enough.");
       }
 
       return;
@@ -161,7 +161,10 @@ export default function SorcererJumpScreen() {
               <Text style={styles.simButtonText}>SIMULATE</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={handleStop} style={[styles.simButton, { backgroundColor: "#555" }]}>
+            <TouchableOpacity
+              onPress={handleStop}
+              style={[styles.simButton, { backgroundColor: "#555" }]}
+            >
               <Text style={styles.simButtonText}>STOP</Text>
             </TouchableOpacity>
           )}
@@ -172,7 +175,13 @@ export default function SorcererJumpScreen() {
           <Text style={styles.cardTitle}>Motion Visualization</Text>
           <View style={styles.canvasContainer}>
             <Svg width={width} height={CANVAS_HEIGHT} key={renderKey}>
-              <Rect x={width / 2 - 20} y={positionRef.current - 40} width={40} height={40} fill="blue" />
+              <Rect
+                x={width / 2 - 20}
+                y={positionRef.current - 40}
+                width={40}
+                height={40}
+                fill="blue"
+              />
               <Rect x={0} y={FLOOR_Y} width={width} height={2} fill="gray" />
             </Svg>
           </View>
