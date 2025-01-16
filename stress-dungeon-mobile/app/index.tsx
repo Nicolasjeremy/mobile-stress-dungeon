@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect} from "react";
 import {
   View,
   Image,
@@ -9,6 +9,8 @@ import {
   TextInput,
   Modal,
 } from "react-native";
+import * as Font from "expo-font";
+import { ActivityIndicator } from "react-native";
 
 // Firebase Auth & Firestore
 import {
@@ -27,9 +29,26 @@ export default function HomeScreen() {
   const [isAnimating, setIsAnimating] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [fontsLoaded, setFontsLoaded] = useState(false);
 
-  // Use expo-router's navigation
+  // Router
   const router = useRouter();
+  
+  useEffect(() => {
+    const loadFonts = async () => {
+      await Font.loadAsync({
+        LostSignal: require("../assets/fonts/LostSignalRegular.otf"),
+        RetroGaming: require("../assets/fonts/RetroGaming.ttf"),
+      });
+      setFontsLoaded(true);
+    };
+
+    loadFonts();
+  }, []);
+
+  if (!fontsLoaded) {
+    return <ActivityIndicator size="large" color="#0000ff" />;
+  }
 
   // Function to handle login
   const handleLogin = async () => {
@@ -40,8 +59,8 @@ export default function HomeScreen() {
         password
       );
       const user = userCredential.user;
-      setIsAnimating(true); // Start cloud animation
-      setIsModalVisible(false); // Close the modal
+      setIsAnimating(true);
+      setIsModalVisible(false);
     } catch (error: any) {
       Alert.alert("Login Failed", error.message);
     }
@@ -63,8 +82,8 @@ export default function HomeScreen() {
         BossHealth: 100,
       });
 
-      setIsAnimating(true); // Start cloud animation
-      setIsModalVisible(false); // Close the modal
+      setIsAnimating(true);
+      setIsModalVisible(false);
     } catch (error: any) {
       Alert.alert("Sign Up Failed", error.message);
     }
@@ -77,19 +96,16 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Background Image */}
       <Image
         source={require("../assets/images/landingPage.png")}
         style={styles.backgroundImage}
         resizeMode="cover"
       />
 
-      {/* Show Cloud Animation if Animating */}
       {isAnimating && (
         <CloudAnimation onAnimationComplete={handleAnimationComplete} />
       )}
 
-      {/* Only show buttons if animation hasn't started */}
       {!isAnimating && (
         <>
           {/* Logo Section */}
@@ -110,7 +126,7 @@ export default function HomeScreen() {
                 setIsModalVisible(true);
               }}
             >
-              <Text style={styles.buttonText}>LOGIN</Text>
+              <Text style={[styles.buttonText, { fontFamily: "RetroGaming" }]}>LOGIN</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -120,7 +136,7 @@ export default function HomeScreen() {
                 setIsModalVisible(true);
               }}
             >
-              <Text style={styles.buttonText}>SIGN UP</Text>
+              <Text style={[styles.buttonText, { fontFamily: "RetroGaming" }]}>SIGN UP</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -135,7 +151,7 @@ export default function HomeScreen() {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
+            <Text style={[styles.modalTitle, { fontFamily: "LostSignal" }]}>
               {isSignUp ? "Sign Up" : "Login"}
             </Text>
 
@@ -163,7 +179,7 @@ export default function HomeScreen() {
               style={styles.modalButton}
               onPress={isSignUp ? handleSignUp : handleLogin}
             >
-              <Text style={styles.modalButtonText}>
+              <Text style={[styles.modalButtonText, { fontFamily: "RetroGaming" }]}>
                 {isSignUp ? "Sign Up" : "Login"}
               </Text>
             </TouchableOpacity>
@@ -173,7 +189,7 @@ export default function HomeScreen() {
               style={styles.closeButton}
               onPress={() => setIsModalVisible(false)}
             >
-              <Text style={styles.closeButtonText}>Close</Text>
+              <Text style={[styles.closeButtonText, { fontFamily: "RetroGaming" }]}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -227,6 +243,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     textAlign: "center",
+    textShadowColor: "#000",
+    textShadowOffset: { width: 3, height: 2 },
+    textShadowRadius: 1,
   },
   modalContainer: {
     flex: 1,

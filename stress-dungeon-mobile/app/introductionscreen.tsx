@@ -1,27 +1,46 @@
-// app/introduction.tsx
-import React, { useState } from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity } from "react-native";
+import React, { useState, useEffect} from "react";
+import { View, Text, StyleSheet, Image, TouchableOpacity , ActivityIndicator} from "react-native";
 import { useRouter } from "expo-router";
 import CloudAnimation from "./cloudAnimation";
+import * as Font from "expo-font";
 
 export default function IntroductionScreen() {
+  
   const router = useRouter();
-
-  // State to track whether the closing cloud animation is playing
+  
+  const [fontsLoaded, setFontsLoaded] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
+  useEffect(() => {
+    const loadFonts = async () => {
+      try {
+        await Font.loadAsync({
+          LostSignal: require("../assets/fonts/LostSignalRegular.otf"),
+          RetroGaming: require("../assets/fonts/RetroGaming.ttf"),
+        });
+        setFontsLoaded(true);
+      } catch (error) {
+        console.error("Error loading fonts", error);
+      }
+    };
 
-  // Called when "Start Adventure!" is pressed
+    loadFonts();
+  }, []);
+
+
   const handleStartAdventure = () => {
-    setIsAnimating(true); // Trigger the cloud animation
+    setIsAnimating(true);
   };
-
+  
   // Called when the cloud animation completes
   const handleAnimationComplete = () => {
     // Navigate to the boss screen
     router.replace("/bossScreen");
   };
+  
+  if (!fontsLoaded) {
+    return <ActivityIndicator size="large" color="#0000ff" />;
+  }
 
-  // If isAnimating is true, we show the cloud animation instead of the intro content
   if (isAnimating) {
     return (
       <View style={styles.container}>
@@ -37,7 +56,6 @@ export default function IntroductionScreen() {
     );
   }
 
-  // Otherwise, show the "How to Play" card and the "Start Adventure" button
   return (
     <View style={styles.container}>
       {/* Background Image */}
@@ -49,22 +67,24 @@ export default function IntroductionScreen() {
 
       {/* How to Play Card */}
       <View style={styles.card}>
-        <Text style={styles.title}>HOW TO PLAY</Text>
-        <Text style={styles.description}>
+        <Text style={[styles.title, { fontFamily: "RetroGaming" }]}>HOW TO PLAY</Text>
+        <Text style={[styles.description, { fontFamily: "LostSignal" }]}>
           Perjalananmu dimulai dengan memilih salah satu dari empat role yang
           tersedia, masing-masing menawarkan cara unik untuk menghadapi boss.
           Setiap role memiliki tantangan atau persoalan yang harus diselesaikan
-          sesuai dengan karakteristiknya. Setiap kali kamu berhasil
-          menyelesaikan persoalan tersebut, health boss akan berkurang. Teruslah
+          sesuai dengan karakteristiknya. 
+          
+          Setiap kali kamu berhasil menyelesaikan persoalan tersebut, health boss akan berkurang. Teruslah
           menyelesaikan tantangan hingga health boss mencapai 0 untuk
-          menaklukkan boss dan berhasil keluar dari Stress Dungeon. Pilih
-          strategimu dengan bijak dan kalahkan stres dengan cara yang seru!
+          menaklukkan boss dan berhasil keluar dari Stress Dungeon. 
+          
+          Pilih strategimu dengan bijak dan kalahkan stres dengan cara yang seru!
         </Text>
       </View>
 
       {/* Start Adventure Button */}
       <TouchableOpacity style={styles.button} onPress={handleStartAdventure}>
-        <Text style={styles.buttonText}>START ADVENTURE!</Text>
+        <Text style={[styles.buttonText, { fontFamily: "RetroGaming" }]}>START ADVENTURE!</Text>
       </TouchableOpacity>
     </View>
   );
@@ -84,7 +104,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width: "85%",
-    backgroundColor: "#F4E1C8",
+    backgroundColor: "#FDF0D5",
     padding: 20,
     borderRadius: 20,
     borderWidth: 3,
@@ -100,14 +120,15 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 10,
-    color: "#773737",
+    color: "white",
     textShadowColor: "#000",
+    textShadowOffset: { width: 5, height: 3 },
     textShadowRadius: 5,
   },
   description: {
     fontSize: 16,
     color: "#3B2F2F",
-    textAlign: "justify",
+    textAlign: "center",
     lineHeight: 22,
   },
   button: {
@@ -125,11 +146,12 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   buttonText: {
-    color: "#fff",
+    color: "white",
     fontSize: 18,
     fontWeight: "bold",
     textAlign: "center",
     textShadowColor: "#000",
-    textShadowRadius: 4,
+    textShadowOffset: { width: 3, height: 2 },
+    textShadowRadius: 1,
   },
 });
