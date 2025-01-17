@@ -36,7 +36,8 @@
       [
         "expo-splash-screen",
         {}
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
@@ -50,9 +51,7 @@
       }
     },
     "owner": "eatflame",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/abd0f3e7-eda8-42ae-bbc1-949fc137c119"
     }
